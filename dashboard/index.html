@@ -1,0 +1,156 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="robots" content="noindex,nofollow">
+<title>GTA 6 Clips Control</title>
+<style>
+/* Layout: one column of panels, status first, then numbers, posts, runs */
+:root{
+  --bg:#f3f2f7;--panel:#ffffff;--fg:#1b1a24;--muted:#6b6880;--line:#e2e0ea;
+  --accent:#d6336c;--ok:#1f9d55;--warn:#c27c0e;--bad:#d64545;
+  --font:"Segoe UI",system-ui,-apple-system,Roboto,sans-serif;
+  color-scheme:light;
+}
+@media (prefers-color-scheme:dark){:root{
+  --bg:#121119;--panel:#1c1a26;--fg:#ecebf3;--muted:#9a97ad;--line:#2d2a3a;
+  --accent:#ff5c95;--ok:#3ccf7d;--warn:#f0a93b;--bad:#ff6b6b;color-scheme:dark}}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--fg);font:14px/1.45 var(--font);
+  padding:16px max(16px,env(safe-area-inset-right)) 40px max(16px,env(safe-area-inset-left))}
+main{max-width:1000px;margin:0 auto;display:grid;gap:16px}
+header{display:flex;flex-wrap:wrap;align-items:center;gap:8px 16px;justify-content:space-between}
+h1{font-size:20px;margin:0}
+h2{font-size:13px;text-transform:uppercase;letter-spacing:.06em;color:var(--muted);margin:0 0 10px}
+.panel{background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:14px 16px;min-width:0}
+.pill{display:inline-block;padding:2px 10px;border-radius:99px;font-weight:600;font-size:12px;color:#fff}
+.ok{background:var(--ok)}.warn{background:var(--warn)}.bad{background:var(--bad)}.idle{background:var(--muted)}
+.muted{color:var(--muted)}
+.tiles{display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:10px}
+.tile{border:1px solid var(--line);border-radius:8px;padding:10px 12px}
+.tile b{display:block;font-size:22px;font-variant-numeric:tabular-nums}
+.tile span{color:var(--muted);font-size:12px}
+ul.alerts{list-style:none;margin:0;padding:0;display:grid;gap:6px}
+ul.alerts li{padding:8px 10px;border-radius:6px;border-left:4px solid var(--warn);background:var(--bg)}
+ul.alerts li.error{border-left-color:var(--bad)}
+.scroll{overflow-x:auto}
+table{border-collapse:collapse;width:100%;font-variant-numeric:tabular-nums}
+th,td{text-align:left;padding:7px 8px;border-bottom:1px solid var(--line);white-space:nowrap}
+td.txt{white-space:normal;min-width:180px}
+th{color:var(--muted);font-weight:600;font-size:12px}
+a{color:var(--accent)}
+.filters{display:flex;flex-wrap:wrap;gap:6px;margin-bottom:10px}
+.filters button{border:1px solid var(--line);background:var(--bg);color:var(--fg);border-radius:99px;padding:4px 12px;cursor:pointer;font:inherit}
+.filters button[aria-pressed="true"]{background:var(--accent);border-color:var(--accent);color:#fff}
+</style>
+</head>
+<body>
+<main>
+  <header>
+    <div><h1>GTA 6 Clips Control</h1><div class="muted" id="updated">Loading...</div></div>
+    <span class="pill idle" id="health">...</span>
+  </header>
+
+  <section class="panel"><h2>Needs attention</h2><ul class="alerts" id="alerts"></ul></section>
+
+  <section class="panel"><h2>Last 21 days by platform</h2><div class="tiles" id="tiles"></div></section>
+
+  <section class="panel">
+    <h2>Posts</h2>
+    <div class="filters" id="filters"></div>
+    <div class="scroll"><table>
+      <thead><tr><th>Time (Libya)</th><th>Platform</th><th>Type</th><th>Status</th><th>Views</th><th>Likes</th><th>Comments</th><th>Post</th></tr></thead>
+      <tbody id="posts"></tbody>
+    </table></div>
+  </section>
+
+  <section class="panel">
+    <h2>Automation runs</h2>
+    <div class="scroll"><table>
+      <thead><tr><th>Time (Libya)</th><th>Task</th><th>Result</th><th>Note</th></tr></thead>
+      <tbody id="runs"></tbody>
+    </table></div>
+  </section>
+  <p class="muted">Refreshes by itself every 10 minutes. To change anything, ask Claude.</p>
+</main>
+<script>
+var filter = "all";
+function el(t, cls, txt){var e=document.createElement(t); if(cls)e.className=cls; if(txt!=null)e.textContent=txt; return e;}
+function n(v){return v==null||v===""?"-":Number(v).toLocaleString();}
+function libya(iso){
+  if(!iso) return "-";
+  var d=new Date(iso); if(isNaN(d)) return iso;
+  return d.toLocaleString("en-GB",{timeZone:"Africa/Tripoli",day:"2-digit",month:"short",hour:"2-digit",minute:"2-digit"});
+}
+var PLAT={tiktok:"TikTok",instagram:"Instagram",youtube:"YouTube",facebook:"Facebook"};
+function render(D){
+  document.getElementById("updated").textContent="Updated "+D.updated+" Libya time";
+  var errs=D.alerts.filter(function(a){return a.level==="error"}).length;
+  var h=document.getElementById("health");
+  h.className="pill "+(errs?"bad":D.alerts.length?"warn":"ok");
+  h.textContent=errs?errs+" problem"+(errs>1?"s":""):D.alerts.length?"Check notes":"All good";
+
+  var al=document.getElementById("alerts"); al.textContent="";
+  if(!D.alerts.length) al.appendChild(el("li","","Nothing. Everything ran as planned."));
+  D.alerts.forEach(function(a){al.appendChild(el("li",a.level,a.text));});
+
+  var tl=document.getElementById("tiles"); tl.textContent="";
+  Object.keys(PLAT).forEach(function(k){
+    var t=D.totals[k]; var box=el("div","tile");
+    box.appendChild(el("span","",PLAT[k]));
+    box.appendChild(el("b","",t?n(t.views):"-"));
+    var sub=t?t.posts+" posts, "+n(t.likes)+" likes, "+n(t.comments)+" comments":"no data yet";
+    if(k==="facebook"&&D.facebook_followers!=null) sub+=", "+n(D.facebook_followers)+" followers";
+    box.appendChild(el("span","","views - "+sub));
+    tl.appendChild(box);
+  });
+
+  var fl=document.getElementById("filters"); fl.textContent="";
+  ["all","tiktok","instagram","youtube","facebook","problems"].forEach(function(k){
+    var b=el("button","",k==="all"?"All":k==="problems"?"Problems":PLAT[k]);
+    b.setAttribute("aria-pressed",String(filter===k));
+    b.onclick=function(){filter=k; render(D);};
+    fl.appendChild(b);
+  });
+
+  var tb=document.getElementById("posts"); tb.textContent="";
+  D.posts.filter(function(p){
+    if(filter==="all") return true;
+    if(filter==="problems") return p.status==="error";
+    return p.platform===filter;
+  }).forEach(function(p){
+    var tr=el("tr");
+    tr.appendChild(el("td","",libya(p.time)));
+    tr.appendChild(el("td","",PLAT[p.platform]||p.platform));
+    tr.appendChild(el("td","",p.kind||"video"));
+    var st=el("td"); var cls={sent:"ok",scheduled:"idle",sending:"warn",error:"bad"}[p.status]||"idle";
+    st.appendChild(el("span","pill "+cls,p.status==="sent"?"posted":p.status)); tr.appendChild(st);
+    tr.appendChild(el("td","",n(p.views)));
+    tr.appendChild(el("td","",n(p.likes)));
+    tr.appendChild(el("td","",n(p.comments)));
+    var lk=el("td","txt");
+    if(p.link){var a=el("a","",p.text||"open"); a.href=p.link; a.target="_blank"; a.rel="noopener"; lk.appendChild(a);}
+    else lk.textContent=(p.text||"")+(p.error?" ("+p.error+")":"");
+    tr.appendChild(lk); tb.appendChild(tr);
+  });
+
+  var rb=document.getElementById("runs"); rb.textContent="";
+  D.runs.forEach(function(r){
+    var tr=el("tr");
+    tr.appendChild(el("td","",r.time)); tr.appendChild(el("td","",r.task));
+    var c=el("td"); c.appendChild(el("span","pill "+({ok:"ok",warn:"warn",failed:"bad"}[r.status]||"idle"),r.status)); tr.appendChild(c);
+    tr.appendChild(el("td","txt",r.note)); rb.appendChild(tr);
+  });
+}
+function load(){
+  var s=document.createElement("script");
+  s.src="data.js?t="+Date.now();
+  s.onload=function(){ if(window.DASH) render(window.DASH); s.remove(); };
+  s.onerror=function(){ document.getElementById("updated").textContent="Could not load data. Try again in a minute."; };
+  document.body.appendChild(s);
+}
+load(); setInterval(load, 600000);
+</script>
+</body>
+</html>
