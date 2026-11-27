@@ -42,6 +42,10 @@ th{color:var(--muted);font-weight:600;font-size:12px}
 a{color:var(--accent)}
 .filters{display:flex;flex-wrap:wrap;gap:6px;margin-bottom:10px}
 .filters button{border:1px solid var(--line);background:var(--bg);color:var(--fg);border-radius:99px;padding:4px 12px;cursor:pointer;font:inherit}
+.review{display:flex;flex-wrap:wrap;gap:12px;align-items:center;justify-content:space-between;margin-bottom:10px}
+.btn{display:inline-block;background:var(--accent);color:#fff;text-decoration:none;font-weight:600;padding:10px 18px;border-radius:8px}
+ul.drafts{list-style:none;margin:10px 0 0;padding:0;display:grid;gap:6px}
+ul.drafts li{display:flex;gap:10px;align-items:center;flex-wrap:wrap;padding:8px 10px;border-radius:6px;background:var(--bg)}
 .filters button[aria-pressed="true"]{background:var(--accent);border-color:var(--accent);color:#fff}
 </style>
 </head>
@@ -51,6 +55,13 @@ a{color:var(--accent)}
     <div><h1>GTA 6 Clips Control</h1><div class="muted" id="updated">Loading...</div></div>
     <span class="pill idle" id="health">...</span>
   </header>
+
+  <section class="panel">
+    <h2>Review</h2>
+    <div class="review"><div class="tiles" id="rtiles" style="flex:1"></div><a class="btn" id="rlink" href="https://claude.ai/artifact/CE88PrZVyq1ir6Jsh6ADzR">Open review page</a></div>
+    <div class="muted" id="rnote"></div>
+    <ul class="drafts" id="drafts"></ul>
+  </section>
 
   <section class="panel"><h2>Needs attention</h2><ul class="alerts" id="alerts"></ul></section>
 
@@ -94,6 +105,18 @@ function render(D){
   var al=document.getElementById("alerts"); al.textContent="";
   if(!D.alerts.length) al.appendChild(el("li","","Nothing. Everything ran as planned."));
   D.alerts.forEach(function(a){al.appendChild(el("li",a.level,a.text));});
+
+  var R=D.review||null, rt=document.getElementById("rtiles"), dl=document.getElementById("drafts");
+  rt.textContent=""; dl.textContent="";
+  if(R){
+    [["waiting","Waiting for you"],["ready","Ready"],["edit","To re-edit"],["picks","Picks"]].forEach(function(k){
+      var box=el("div","tile"); box.appendChild(el("b","",n(R[k[0]]))); box.appendChild(el("span","",k[1])); rt.appendChild(box);});
+    document.getElementById("rnote").textContent="Review page as of "+R.updated+" Libya time"+(R.picks_new?", "+R.picks_new+" pick"+(R.picks_new>1?"s":"")+" waiting for analysis":"");
+    (R.drafts||[]).forEach(function(d){
+      var li=el("li"); li.appendChild(el("span","muted",libya(d.time)));
+      var cls={waiting:"warn",ready:"ok",edit:"warn",remove:"bad"}[d.state]||"idle";
+      li.appendChild(el("span","pill "+cls,d.state)); li.appendChild(el("span","",d.top)); dl.appendChild(li);});
+  } else document.getElementById("rnote").textContent="No review data yet. It appears after the next run.";
 
   var tl=document.getElementById("tiles"); tl.textContent="";
   Object.keys(PLAT).forEach(function(k){
